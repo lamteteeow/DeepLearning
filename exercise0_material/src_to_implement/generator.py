@@ -38,13 +38,16 @@ class ImageGenerator:
         self.shuffle = shuffle
         self.epoch = 0
         self.num_images = 0
+        self.image_index = 0
 
         with open(label_path) as jdata:
-            jsonlabels = json.load(jdata)
-        self.labels = jsonlabels
+            self.labels = json.load(jdata)
 
         self.image_names = sorted(os.listdir(file_path))
         self.num_images = len(self.image_names)
+
+        if self.shuffle:
+            np.random.shuffle(self.image_names)
 
         self.class_dict = {
             0: "airplane",
@@ -70,17 +73,25 @@ class ImageGenerator:
         lbs = []
         lost_images = 0
 
-        for i in range(self.batch_size):
-            # Update epoch
-            new_epoch = i // self.num_images + 1
-            index = i % self.num_images
-            if new_epoch > self.epoch:
-                self.epoch = new_epoch
+        for _ in range(self.batch_size):
+            # current_epoch = i // self.num_images
+            # image_index = i % self.num_images
+
+            # if current_epoch > self.epoch:
+            #     self.epoch = current_epoch
+            #     if self.shuffle:
+            #         np.random.shuffle(self.image_names)
+
+            if self.image_index >= self.num_images:
+                self.image_index = 0
+                self.epoch += 1
                 if self.shuffle:
                     np.random.shuffle(self.image_names)
 
             # Get image filename and path
-            image_path = os.path.join(self.file_path, self.image_names[index])
+            image_path = os.path.join(
+                self.file_path, self.image_names[self.image_index]
+            )
 
             # Load image data
             try:
@@ -93,15 +104,25 @@ class ImageGenerator:
                 continue
 
             # Check image size and resize if necessary
-            res = list(np.array(taken_image).shape)
-            if res != self.image_size:
-                taken_image = resize(taken_image, tuple(np.array(self.image_size)[0:2]))
+            # res = list(np.array(taken_image).shape)
+            # if res != self.image_size:
+            #   taken_image = resize(taken_image, tuple(np.array(self.image_size)[0:2]))
+            taken_image = resize(
+                taken_image,
+                self.image_size,
+                preserve_range=True,
+                anti_aliasing=True,
+            )
+
+            taken_image = self.augment(taken_image)
 
             # Add taken image to images batch
             images.append(taken_image)
-            lbs.append(self.labels[os.path.splitext(self.image_names[index])[0]])
+            lbs.append(
+                self.labels[os.path.splitext(self.image_names[self.image_index])[0]]
+            )
 
-            taken_image = self.augment(taken_image)
+            self.image_index += 1
 
         return np.array(images), np.array(lbs)
 
@@ -111,7 +132,8 @@ class ImageGenerator:
         if self.mirroring and np.random.rand() >= 0.5:
             img = np.fliplr(img)
         if self.rotation:
-            img = np.rot90(img, np.random.randint(0, 4))
+            # images have to be rotated if the flag is set
+            img = np.rot90(img, np.random.randint(0, 3))
         return img
 
     def current_epoch(self):
