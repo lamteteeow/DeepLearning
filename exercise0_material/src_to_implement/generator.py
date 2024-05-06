@@ -1,10 +1,8 @@
-# import scipy.misc
 import json
 import numpy as np
 import matplotlib.pyplot as plt
 import os.path
 from skimage.transform import resize
-# import cv2
 
 
 # In this exercise task you will implement an image generator. Generator objects in python are defined as having a next function.
@@ -130,8 +128,11 @@ class ImageGenerator:
     def augment(self, img):
         # this function takes a single image as an input and performs a random transformation
         # (mirroring and/or rotation) on it and outputs the transformed image
-        if self.mirroring and np.random.rand() >= 0.5:
-            img = np.fliplr(img)
+        if self.mirroring:
+            if np.random.rand() >= 0.5:
+                img = np.fliplr(img)
+            else:
+                img = np.flipud(img)
         if self.rotation:
             # images have to be rotated if the flag is set
             img = np.rot90(img, np.random.randint(0, 3))
@@ -160,7 +161,8 @@ class ImageGenerator:
             img = batch_images[i]
             # create subplot and append to ax
             ax.append(fig.add_subplot(rows, columns, i + 1))
-            ax[-1].set_title(self.class_name(batch_lbs[i]))  # set title
+            # set title
+            ax[-1].set_title(self.class_name(batch_lbs[i]))
             plt.imshow(img)
 
-        plt.show()  # finally, render the plot
+        plt.show()
