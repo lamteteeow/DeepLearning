@@ -1,30 +1,16 @@
-# import os.path
 # import scipy.misc
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-import glob
-import cv2
+import os.path
+from skimage.transform import resize
+# import cv2
 
 
 # In this exercise task you will implement an image generator. Generator objects in python are defined as having a next function.
 # This next function returns the next generated object. In our case it returns the input of a neural network each time it gets called.
 # This input consists of a batch of images and its corresponding labels.
 class ImageGenerator:
-    file_path = ""
-    label_path = ""
-    image_path = ""
-    batch_size = 0
-    image_size = (0, 0)
-    class_dict = {}
-    all_images = []
-    image_labels = {"a": 1, "b": 2}
-    flag = 0
-    number_of_image = 0
-    rotation = False
-    mirroring = False
-    shuffle = False
-
     def __init__(
         self,
         file_path,
@@ -50,18 +36,15 @@ class ImageGenerator:
         self.rotation = rotation
         self.mirroring = mirroring
         self.shuffle = shuffle
+        self.epoch = 0
+        self.num_images = 0
 
         with open(label_path) as jdata:
             jsonlabels = json.load(jdata)
-        self.image_labels = jsonlabels
+        self.labels = jsonlabels
 
-        self.image_path = file_path + "/*.npy"
-        images = glob.glob(self.image_path)
-
-        for myFile in images:
-            image_load = np.load(myFile)
-            self.number_of_image += 1
-            self.all_images.append(image_load)
+        self.image_names = sorted(os.listdir(file_path))
+        self.num_images = len(self.image_names)
 
         self.class_dict = {
             0: "airplane",
@@ -75,6 +58,7 @@ class ImageGenerator:
             8: "ship",
             9: "truck",
         }
+
         # print(np.array(self.all_images).shape)
 
     def next(self):
@@ -84,37 +68,50 @@ class ImageGenerator:
         # Think about how to handle such cases
         images = []
         lbs = []
+        lost_images = 0
 
         for i in range(self.batch_size):
-            j = (self.flag + i) % self.number_of_image
-            taken_image = self.all_images[j]
-            # if j == 98:
-            #     print(123123)
-            # check image size and resize if necessary
-            resolution = list(np.array(taken_image).shape)
-            if resolution != self.image_size:
-                taken_image = cv2.resize(
-                    taken_image, tuple(np.array(self.image_size)[0:2])
+            # Update epoch
+            new_epoch = i // self.num_images + 1
+            index = i % self.num_images
+            if new_epoch > self.epoch:
+                self.epoch = new_epoch
+                if self.shuffle:
+                    np.random.shuffle(self.image_names)
+
+            # Get image filename and path
+            image_path = os.path.join(self.file_path, self.image_names[index])
+
+            # Load image data
+            try:
+                taken_image = np.load(image_path)
+            except FileNotFoundError:
+                lost_images += 1
+                print(
+                    f"Error: File not found at {image_path}.\n{lost_images} images were not found."
                 )
+                continue
 
-            # add taken image to images batch
+            # Check image size and resize if necessary
+            res = list(np.array(taken_image).shape)
+            if res != self.image_size:
+                taken_image = resize(taken_image, tuple(np.array(self.image_size)[0:2]))
+
+            # Add taken image to images batch
             images.append(taken_image)
-            lbs.append(self.image_labels[str(j)])
+            lbs.append(self.labels[os.path.splitext(self.image_names[index])[0]])
 
-        # print(np.array(images).shape)
-        # return images, labels
-        return images, lbs
+            taken_image = self.augment(taken_image)
+
+        return np.array(images), np.array(lbs)
 
     def augment(self, img):
         # this function takes a single image as an input and performs a random transformation
         # (mirroring and/or rotation) on it and outputs the transformed image
-        # TODO: implement augmentation function
-
-        if self.mirroring and np.random.rand() > 0.5:
+        if self.mirroring and np.random.rand() >= 0.5:
             img = np.fliplr(img)
         if self.rotation:
-            k = np.random.randint(0, 4)
-            img = np.rot90(img, k)
+            img = np.rot90(img, np.random.randint(0, 4))
         return img
 
     def current_epoch(self):
@@ -128,23 +125,19 @@ class ImageGenerator:
     def show(self):
         # In order to verify that the generator creates batches as required, this functions calls next to get a
         # batch of images and labels and visualizes it.
-        (batch_image, batch_lbls) = self.next()
+        (batch_images, batch_lbs) = self.next()
         fig = plt.figure(figsize=(50, 50))  # width, height in inches
         columns = 10
         rows = 10
-
-        # prep (x,y) for extra plotting
-        xs = np.linspace(0, 2 * np.pi, 60)  # from 0 to 2pi
-        ys = np.abs(np.sin(xs))  # absolute of sine
 
         # ax enables access to manipulate each of subplots
         ax = []
 
         for i in range(self.batch_size):
-            img = batch_image[i]
+            img = batch_images[i]
             # create subplot and append to ax
             ax.append(fig.add_subplot(rows, columns, i + 1))
-            ax[-1].set_title(self.class_name(batch_lbls[i]))  # set title
+            ax[-1].set_title(self.class_name(batch_lbs[i]))  # set title
             plt.imshow(img)
 
         plt.show()  # finally, render the plot
