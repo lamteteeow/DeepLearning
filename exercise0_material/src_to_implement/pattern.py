@@ -1,43 +1,45 @@
-from abc import abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 class Pattern:
-    def __init__(self, res):
-        self.res = res
-        self.output = None
-
-    @classmethod
-    def create(cls, res, *args):
+    def __init__(self, res, *args):
+        # Determine the type of pattern based on args
         if len(args) == 1 and isinstance(args[0], int):
-            return Checker(res, args[0])
+            self.__class__ = Checker
         elif len(args) == 2 and isinstance(args[0], int) and isinstance(args[1], tuple):
-            return Circle(res, args[0], args[1])
+            self.__class__ = Circle
         elif len(args) == 0:
-            return Spectrum(res)
+            self.__class__ = Spectrum
         else:
             raise ValueError("Invalid parameters for pattern creation")
 
-    @abstractmethod
+        # Initialize the chosen subclass
+        self.res = res
+        self.output = np.empty((self.res, self.res))
+        if hasattr(self, "__post_init__"):
+            self.__post_init__(*args)
+
     def draw(self):
-        raise NotImplementedError("Subclass must implement draw method")
+        raise NotImplementedError("Subclasses must implement this method")
 
     def show(self):
-        plt.imshow(self.output, cmap="gray")
-        plt.show()
+        if self.output is not None:
+            plt.imshow(self.output, cmap="gray" if self.output.ndim == 2 else None)
+            plt.title(self.__class__.__name__)
+            plt.axis("off")
+            plt.show()
+        else:
+            print("No pattern generated to show.")
 
 
 class Checker(Pattern):
-    def __init__(self, res, tile_size):
-        super().__init__(res)
+    def __post_init__(self, tile_size):
         self.tile_size = tile_size
-        if res % (2 * self.tile_size) != 0:
+        if self.res % (2 * self.tile_size) != 0:
             raise ValueError("Resolution must be evenly divisible by 2 * tile_size")
 
     def draw(self):
-        if self.res % (2 * self.tile_size) != 0:
-            raise ValueError("Please check resolution and tize_size arguments.")
         black_tile = np.zeros((self.tile_size, self.tile_size), dtype=int)
         white_tile = np.ones((self.tile_size, self.tile_size), dtype=int)
         # Black tile top left
@@ -60,11 +62,10 @@ class Checker(Pattern):
 
 
 class Circle(Pattern):
-    def __init__(self, res, radius, pos):
-        super().__init__(res)
+    def __post_init__(self, radius, pos):
         self.radius = radius
         self.pos = pos
-        self.output = np.zeros((res, res, 3))
+        # self.output = np.zeros((self.res, self.res, 3))
 
     def draw(self):
         # if (self.pos[0] + self.radius) > (self.res // 2) or (
@@ -99,8 +100,8 @@ class Circle(Pattern):
 
 
 class Spectrum(Pattern):
-    def __init__(self, res):
-        super().__init__(res)
+    def __post_init__(self):
+        pass
 
     def draw(self):
         unit = np.linspace(0.0, 1.0, num=self.res)
@@ -112,18 +113,3 @@ class Spectrum(Pattern):
         self.output = np.dstack((r, g, b))
 
         return np.copy(self.output)
-
-
-if __name__ == "__main__":
-    ch = Checker(512, 64)
-    ch.draw()
-    ch.show()
-
-    c = Circle(512, 100, (250, 250))
-    c.draw()
-    c.show()
-
-    s = Spectrum(512)
-    s.draw()
-    s.show()
-    # pass
