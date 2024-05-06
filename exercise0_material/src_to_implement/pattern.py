@@ -16,7 +16,7 @@ class Pattern:
 
         # Initialize the chosen subclass
         self.res = res
-        self.output = np.empty((self.res, self.res))
+        self.output = np.zeros((self.res, self.res), dtype=int)
         if hasattr(self, "__post_init__"):
             self.__post_init__(*args)
 
@@ -65,7 +65,6 @@ class Circle(Pattern):
     def __post_init__(self, radius, pos):
         self.radius = radius
         self.pos = pos
-        # self.output = np.zeros((self.res, self.res, 3))
 
     def draw(self):
         # if (self.pos[0] + self.radius) > (self.res // 2) or (
@@ -73,28 +72,18 @@ class Circle(Pattern):
         # ) > (self.res // 2):
         #     raise ValueError("Please check res and radius arguments.")
 
-        xval = np.linspace(
-            self.pos[0] - self.radius,
-            self.pos[0] + self.radius,
-            num=self.radius * 2 + 1,
-            dtype=int,
-        )
-        yval = np.linspace(
-            self.pos[1] - self.radius,
-            self.pos[1] + self.radius,
-            num=self.radius * 2 + 1,
-            dtype=int,
-        )
+        xval = np.arange(self.res)
+        yval = np.arange(self.res)
 
         # Create a meshgrid
-        x_v, y_v = np.meshgrid(xval, yval)
+        xgrid, ygrid = np.meshgrid(xval, yval)
 
         max_radius = (
-            np.square(x_v - self.pos[0]) + np.square(y_v - self.pos[1])
+            np.square(xgrid - self.pos[0]) + np.square(ygrid - self.pos[1])
             <= self.radius**2
         )
 
-        self.output[x_v[max_radius], y_v[max_radius]] = 1.0
+        self.output = max_radius
 
         return np.copy(self.output)
 
