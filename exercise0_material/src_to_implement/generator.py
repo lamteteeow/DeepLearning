@@ -1,8 +1,10 @@
+# import os.path
+# import scipy.misc
 import json
-import glob
 import numpy as np
-import cv2
 import matplotlib.pyplot as plt
+import glob
+import cv2
 
 
 # In this exercise task you will implement an image generator. Generator objects in python are defined as having a next function.
@@ -108,57 +110,16 @@ class ImageGenerator:
         # (mirroring and/or rotation) on it and outputs the transformed image
         # TODO: implement augmentation function
 
-        lbs = []
-
-        # shuffling
-        if self.shuffle:
-            # s = np.arange(np.array(images).shape[0])
-            # np.random.shuffle(s)
-            # images = images[s[0]]
-            # lbs = lbs[s[0]]
-            # print(lbs)
-            temp_img = []
-            temp_lbs = []
-            indices = np.arange(self.batch_size)
-            np.random.shuffle(indices)
-            # print(indices)
-
-            for i in range(self.batch_size):
-                temp_img.append(img[indices[i]])
-                temp_lbs.append(lbs[indices[i]])
-
-            img = temp_img
-            lbs = temp_lbs
-
-        # rotation
+        if self.mirroring and np.random.rand() > 0.5:
+            img = np.fliplr(img)
         if self.rotation:
-            rdstart = self.flag
-            rdend = self.flag + self.batch_size
-            for i in np.random.randint(rdstart, rdend, self.batch_size):
-                j = i % self.number_of_image
-                d = np.random.randint(1, 4, 1)
-                rotated_image = np.rot90(img[j], d[0])
-                img[j] = rotated_image
-
-        # mirroring
-        if self.mirroring:
-            rdstart = self.flag
-            rdend = self.flag + self.batch_size
-            for i in np.random.randint(rdstart, rdend, self.batch_size):
-                j = i % self.number_of_image
-                flipped_image = np.fliplr(img[j])
-                img[j] = flipped_image
-
-        # change flag
-        self.flag = (self.flag + self.batch_size) % self.number_of_image
-
-        img = np.asarray(img)
-
+            k = np.random.randint(0, 4)
+            img = np.rot90(img, k)
         return img
 
     def current_epoch(self):
         # return the current epoch number
-        return 0
+        return self.epoch
 
     def class_name(self, x):
         # This function returns the class name for a specific input
