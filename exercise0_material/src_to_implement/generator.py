@@ -74,6 +74,7 @@ class ImageGenerator:
         lost_images = 0
 
         for _ in range(self.batch_size):
+            # this methods only works with batch_size < num_images
             # current_epoch = i // self.num_images
             # image_index = i % self.num_images
 
