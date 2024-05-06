@@ -4,13 +4,9 @@ import matplotlib.pyplot as plt
 
 
 class Pattern:
-    def __init__(self, res, *args):
-        if len(args) == 1:
-            Checker.__init__(self, res, args[0])
-        elif len(args) == 2:
-            Circle.__init__(self, res, args[0], args[1])
-        else:
-            Spectrum.__init__(self, res)
+    def __init__(self, res):
+        self.res = res
+        self.output = None
 
     @classmethod
     def create(cls, res, *args):
@@ -34,12 +30,10 @@ class Pattern:
 
 class Checker(Pattern):
     def __init__(self, res, tile_size):
-        assert isinstance(res, int) and res >= 0
-        self.res = res
-        assert isinstance(tile_size, int) and tile_size >= 0
+        super().__init__(res)
         self.tile_size = tile_size
-        assert res % self.tile_size == 0
-        self.output = np.empty((res, res))
+        if res % (2 * self.tile_size) != 0:
+            raise ValueError("Resolution must be evenly divisible by 2 * tile_size")
 
     def draw(self):
         if self.res % (2 * self.tile_size) != 0:
@@ -67,13 +61,10 @@ class Checker(Pattern):
 
 class Circle(Pattern):
     def __init__(self, res, radius, pos):
-        assert isinstance(res, int) and res >= 0
-        self.res = res
-        assert isinstance(radius, int) and radius >= 0
+        super().__init__(res)
         self.radius = radius
-        assert isinstance(pos, tuple)
         self.pos = pos
-        self.output = np.empty((res, res))
+        self.output = np.zeros((res, res, 3))
 
     def draw(self):
         # if (self.pos[0] + self.radius) > (self.res // 2) or (
@@ -109,9 +100,7 @@ class Circle(Pattern):
 
 class Spectrum(Pattern):
     def __init__(self, res):
-        assert isinstance(res, int) and res >= 0
-        self.res = res
-        self.output = np.empty((res, res, 3))
+        super().__init__(res)
 
     def draw(self):
         unit = np.linspace(0.0, 1.0, num=self.res)
