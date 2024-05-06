@@ -1,14 +1,44 @@
+from abc import abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
 
 
-class Checker:
+class Pattern:
+    def __init__(self, res, *args):
+        if len(args) == 1:
+            Checker.__init__(self, res, args[0])
+        elif len(args) == 2:
+            Circle.__init__(self, res, args[0], args[1])
+        else:
+            Spectrum.__init__(self, res)
+
+    @classmethod
+    def create(cls, res, *args):
+        if len(args) == 1 and isinstance(args[0], int):
+            return Checker(res, args[0])
+        elif len(args) == 2 and isinstance(args[0], int) and isinstance(args[1], tuple):
+            return Circle(res, args[0], args[1])
+        elif len(args) == 0:
+            return Spectrum(res)
+        else:
+            raise ValueError("Invalid parameters for pattern creation")
+
+    @abstractmethod
+    def draw(self):
+        raise NotImplementedError("Subclass must implement draw method")
+
+    def show(self):
+        plt.imshow(self.output, cmap="gray")
+        plt.show()
+
+
+class Checker(Pattern):
     def __init__(self, res, tile_size):
         assert isinstance(res, int) and res >= 0
         self.res = res
         assert isinstance(tile_size, int) and tile_size >= 0
         self.tile_size = tile_size
-        assert res % tile_size == 0
+        assert res % self.tile_size == 0
         self.output = np.empty((res, res))
 
     def draw(self):
@@ -26,16 +56,16 @@ class Checker:
         )
 
         self.output = np.tile(
-            block_unit, self.res / self.tile_size, self.res / self.tile_size
+            block_unit,
+            (
+                int(self.res // (2 * self.tile_size)),
+                int(self.res // (2 * self.tile_size)),
+            ),
         )
         return np.copy(self.output)
 
-    def show(self):
-        plt.imshow(self.output, cmap="gray")
-        plt.show()
 
-
-class Circle:
+class Circle(Pattern):
     def __init__(self, res, radius, pos):
         assert isinstance(res, int) and res >= 0
         self.res = res
@@ -43,11 +73,68 @@ class Circle:
         self.radius = radius
         assert isinstance(pos, tuple)
         self.pos = pos
-        self.out = np.empty()
+        self.output = np.empty((res, res))
 
     def draw(self):
         # if (self.pos[0] + self.radius) > (self.res // 2) or (
         #     self.pos[1] + self.radius
         # ) > (self.res // 2):
         #     raise ValueError("Please check res and radius arguments.")
-        return
+
+        xval = np.linspace(
+            self.pos[0] - self.radius,
+            self.pos[0] + self.radius,
+            num=self.radius * 2 + 1,
+            dtype=int,
+        )
+        yval = np.linspace(
+            self.pos[1] - self.radius,
+            self.pos[1] + self.radius,
+            num=self.radius * 2 + 1,
+            dtype=int,
+        )
+
+        # Create a meshgrid
+        x_v, y_v = np.meshgrid(xval, yval)
+
+        max_radius = (
+            np.square(x_v - self.pos[0]) + np.square(y_v - self.pos[1])
+            <= self.radius**2
+        )
+
+        self.output[x_v[max_radius], y_v[max_radius]] = 1.0
+
+        return np.copy(self.output)
+
+
+class Spectrum(Pattern):
+    def __init__(self, res):
+        assert isinstance(res, int) and res >= 0
+        self.res = res
+        self.output = np.empty((res, res, 3))
+
+    def draw(self):
+        unit = np.linspace(0.0, 1.0, num=self.res)
+        # Create the rbg planes
+        r = np.tile(unit, (self.res, 1))
+        g = np.rot90(np.rot90(np.rot90(r)))
+        b = np.rot90(np.rot90(r))
+
+        self.output = np.dstack((r, g, b))
+
+        return np.copy(self.output)
+
+
+if __name__ == "__main__":
+    ch = Checker(512, 64)
+    ch.draw()
+    ch.show()
+
+    c = Circle(512, 100, (250, 250))
+    c.draw()
+    c.show()
+
+    s = Spectrum(512)
+    s.draw()
+    s.show()
+    # pass
