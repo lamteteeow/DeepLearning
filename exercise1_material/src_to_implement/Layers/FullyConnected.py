@@ -12,11 +12,11 @@ class FullyConnected(BaseLayer):
         self.input_tensor = None
 
     def forward(self, input_tensor):
-        b_input_tensor = np.append(
+        input_tensor_bias = np.append(
             input_tensor, np.ones([input_tensor.shape[0], 1]), axis=1
         )
-        self.input_tensor = b_input_tensor
-        return np.dot(b_input_tensor, self.weights)
+        self.input_tensor = input_tensor_bias
+        return np.dot(input_tensor_bias, self.weights)
 
     def backward(self, error_tensor):
         back_weights = self.weights[:-1]
