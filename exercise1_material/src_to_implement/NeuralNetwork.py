@@ -8,6 +8,7 @@ class NeuralNetwork:
         self.layers = []
         # self.data_layer = None
         # self.loss_layer = None
+        self.label_tensor = None
 
     def forward(self):
         # Provide 2 variables by calling next() from data layer:
@@ -17,11 +18,10 @@ class NeuralNetwork:
         self.label_tensor = label_tensor
 
         # Forward input_tensor through the whole network (of Layers and Optimizers folder):
-        tensor = input_tensor
-        # need to flatten this loop
+        # need to call this loop recursively
         for layer in self.layers:
-            tensor = layer.forward(tensor)
-        loss = self.loss_layer.forward(tensor, label_tensor)
+            input_tensor = layer.forward(input_tensor)
+        loss = self.loss_layer.forward(input_tensor, label_tensor)
         return loss
 
     def backward(self):
@@ -40,8 +40,15 @@ class NeuralNetwork:
             self.loss.append(loss)
             self.backward()
 
+        # Trying to make it recursive:
+        # loss = self.forward()
+        # self.loss.append(loss)
+        # self.backward()
+        # if iterations > 0:
+        #     self.train(iterations - 1)
+
     def test(self, input_tensor):
-        # need to flatten this loop
+        # need to call this loop recursively
         output_tensor = input_tensor
         for layer in self.layers:
             output_tensor = layer.forward(output_tensor)
