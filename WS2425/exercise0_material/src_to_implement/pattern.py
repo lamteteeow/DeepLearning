@@ -58,8 +58,6 @@ class Spectrum:
         self.output[:, :, 2] = np.linspace(1, 0, self.resolution)
         return self.output.copy()
 
-        return self.output.copy()
-
     def show(self):
         plt.imshow(self.output)
         plt.show()
