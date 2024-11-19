@@ -547,5 +547,3 @@ if __name__ == '__main__':
         table.append([])
         table.append(["Ex1", "Total Achieved", "", "{} / 100 (%)".format(total_points), "{:.3f} / 10 (%)".format(total_points * exam_percentage / 100)])
         print(tabulate.tabulate(table, headers=['Pos', 'Test', "Result", 'Percent in Exercise', 'Percent in Exam'], tablefmt="github"))
-    else:
-        unittest.main()
