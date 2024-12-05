@@ -1,6 +1,5 @@
-import numpy as np
-
 from Layers.Base import BaseLayer
+import numpy as np
 
 
 class ReLU(BaseLayer):
@@ -9,8 +8,10 @@ class ReLU(BaseLayer):
         self.relu_gradient = None
 
     def forward(self, input_tensor):
-        self.relu_gradient = np.maximum(input_tensor, 0.0)
-        return self.relu_gradient
+        output = np.maximum(input_tensor, 0.0)
+        self.relu_gradient = output
+        return output
 
     def backward(self, error_tensor):
-        return error_tensor * (self.input_tensor > 0)
+        output = error_tensor * (self.relu_gradient > 0)
+        return output
