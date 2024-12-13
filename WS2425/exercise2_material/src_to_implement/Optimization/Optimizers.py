@@ -2,7 +2,7 @@ import numpy as np
 
 
 # Here is Sgd from exe 1
-class Sgd:  # S.tochastic G.radient D.escent Algorithm
+class Sgd:
     def __init__(self, learning_rate: float):
         # data type fload for learning rate
         self.learning_rate = learning_rate
