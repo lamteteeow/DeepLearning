@@ -1,91 +1,75 @@
-import numpy as np
+import numpy as np #type: ignore
+from abc import ABC, abstractmethod
+from copy import deepcopy
 
 
-class Optimizer:
-    def __init__(self):
+class BaseOptimizer(ABC):
+    def __init__(self) -> None:
+        super().__init__()
         self.regularizer = None
+
+    @abstractmethod
+    def calculate_update(self, weight_tensor, gradient_tensor): 
+        pass
 
     def add_regularizer(self, regularizer):
         self.regularizer = regularizer
 
-
-class Sgd(Optimizer):
-    """
-    Implements the Stocastic gradient descent learning algorithm.
-    """
-
-    def __init__(self, learning_rate):
-        super().__init__()
-        assert type(learning_rate) is float or int
-        self.learning_rate = learning_rate
-
-    def calculate_update(self, weight_tensor, gradient_tensor):
-        ## Perform SGD by changing the weight tensor with gradient and learning rate ##
-        updated_weight = weight_tensor - self.learning_rate * gradient_tensor
+    def apply_regularization(self, intermediate_update, weight_tensor):
+        regularization_gradient = 0      
         if self.regularizer is not None:
-            updated_weight -= self.learning_rate * self.regularizer.calculate_gradient(
-                weight_tensor
-            )
-        return updated_weight
+            regularization_gradient = self.learning_rate * self.regularizer.calculate_gradient(weight_tensor)
+        return intermediate_update - regularization_gradient
 
+class Sgd(BaseOptimizer):
+    def __init__(self, learning_rate:float):
+        super().__init__()
+        self.learning_rate = learning_rate
+    
+    def calculate_update(self, weight_tensor, gradient_tensor):
+        intermediate_update = weight_tensor - self.learning_rate * gradient_tensor
+        return self.apply_regularization(intermediate_update, weight_tensor)
 
-class SgdWithMomentum(Optimizer):
-    """
-    Implements the SGD with Momentum optimization algorithm.
-    """
-
+class SgdWithMomentum(BaseOptimizer):
     def __init__(self, learning_rate, momentum_rate):
         super().__init__()
         self.learning_rate = learning_rate
         self.momentum_rate = momentum_rate
-        self.prev_v = 0.0
-
+        self.v = None
+    
     def calculate_update(self, weight_tensor, gradient_tensor):
-        v = self.momentum_rate * self.prev_v - self.learning_rate * gradient_tensor
-        self.prev_v = v
-        updated_weight = weight_tensor + v
-        if self.regularizer is not None:
-            updated_weight -= self.learning_rate * self.regularizer.calculate_gradient(
-                weight_tensor
-            )
-        return updated_weight
+        if self.v is None:
+            self.v = np.zeros_like(weight_tensor)
+        
+        self.v = self.momentum_rate * self.v + self.learning_rate * gradient_tensor
+        intermediate_update = weight_tensor - self.v
+        return self.apply_regularization(intermediate_update, weight_tensor)
 
 
-class Adam(Optimizer):
-    """
-    Implements the Adam optimization algorithm.
-    """
-
+class Adam(BaseOptimizer):
     def __init__(self, learning_rate, mu, rho):
         super().__init__()
         self.learning_rate = learning_rate
-        self.k = 1
         self.mu = mu
         self.rho = rho
-        self.prev_v = 0.0
-        self.prev_r = 0.0
+        self.v = None
+        self.r = None
+        self.k = 0
 
     def calculate_update(self, weight_tensor, gradient_tensor):
-        g = gradient_tensor
+        if self.v is None:
+            self.v = np.zeros_like(weight_tensor)
 
-        v = self.mu * self.prev_v + (1 - self.mu) * g
-        self.prev_v = v
+        if self.r is None:
+            self.r = np.zeros_like(weight_tensor)
 
-        r = self.rho * self.prev_r + (1 - self.rho) * (g**2)
-        self.prev_r = r
+        self.k += 1
 
-        v = v / (1 - (self.mu**self.k))
-        r = r / (1 - (self.rho**self.k))
-
-        self.k = self.k + 1
-
-        updated_weight = weight_tensor - self.learning_rate * (
-            v / (np.sqrt(r) + np.finfo(float).eps)
-        )
-
-        if self.regularizer is not None:
-            updated_weight -= self.learning_rate * self.regularizer.calculate_gradient(
-                weight_tensor
-            )
-
-        return updated_weight
+        self.v = self.mu * self.v + (1.0 - self.mu) * gradient_tensor
+        self.r = self.rho * self.r + (1.0 - self.rho) * (gradient_tensor ** 2)
+        
+        v_hat = self.v / (1.0 - self.mu ** self.k)
+        r_hat = self.r / (1.0 - self.rho ** self.k)
+        
+        intermediate_update = weight_tensor - self.learning_rate * (v_hat / (np.sqrt(r_hat) + np.finfo(float).eps))
+        return self.apply_regularization(intermediate_update, weight_tensor)

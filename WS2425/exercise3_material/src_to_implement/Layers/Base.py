@@ -1,11 +1,20 @@
-class BaseLayer:
+from abc import ABC, abstractmethod
+from .Initializers import BaseInitializer
+
+class BaseLayer(object):
     def __init__(self):
         self.trainable = False
-        self.weights = None  # to be initialized in child class
+        self.weights = []
         self.testing_phase = False
 
-    def forward(self, input_tensor):
-        raise NotImplementedError("forward method not implemented in child class.")
+class InitializableLayer(BaseLayer):
+    def initialize(self, weights_initializer: BaseInitializer, bias_initializer: BaseInitializer):
+        pass
 
-    def backward(self, error_tensor):
-        raise NotImplementedError("backward method not implemented in child class.")
+class PhaseSeperatableLayer(BaseLayer):
+    def set_phase(self, phase):
+        self.testing_phase = phase
+
+class InitializableWithPhaseSeperationLayer(InitializableLayer):
+    def set_phase(self, phase):
+        self.testing_phase = phase

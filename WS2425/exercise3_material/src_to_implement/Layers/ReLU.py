@@ -1,17 +1,13 @@
-from Layers.Base import BaseLayer
-import numpy as np
+import numpy as np # type: ignore
+from Layers.Base import BaseLayer, InitializableLayer, PhaseSeperatableLayer
 
-
-class ReLU(BaseLayer):
-    def __init__(self):
+class ReLU(PhaseSeperatableLayer):
+    def __init__(self) -> None:
         super().__init__()
-        self.relu_gradient = None
 
     def forward(self, input_tensor):
-        output = np.maximum(input_tensor, 0.0)
-        self.relu_gradient = output
-        return output
-
+        self.input_tensor = input_tensor
+        return self.input_tensor * (input_tensor > 0)
+    
     def backward(self, error_tensor):
-        output = error_tensor * (self.relu_gradient > 0)
-        return output
+        return error_tensor * (self.input_tensor > 0)

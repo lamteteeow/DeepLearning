@@ -1,24 +1,22 @@
-from Layers.Base import BaseLayer
-import numpy as np
+import numpy as np # type: ignore
 
+from Layers.Base import BaseLayer, PhaseSeperatableLayer
 
-class SoftMax(BaseLayer):
-    def __init__(self):
+class SoftMax(PhaseSeperatableLayer):
+
+    def __init__(self) -> None:
         super().__init__()
-
+    
     def forward(self, input_tensor):
-        x_k = input_tensor
-        x_tilde = x_k - np.max(x_k, axis=1, keepdims=True)
-        input_tensor_exp = np.exp(x_tilde)  # array of exp of each element
-        input_tensor_sum = np.sum(input_tensor_exp, axis=1, keepdims=True)
-        next_input_tensor = np.divide(input_tensor_exp, input_tensor_sum)
+        # if x_k > 0 --> e^(x_k) might become very large
+        # So, shifting to increase numerical stability: x_hat = x - max(x)
+        scaled_input = input_tensor - np.max(input_tensor, axis = 1, keepdims = True) 
 
-        self.next_input_tensor = next_input_tensor
-        return next_input_tensor
-
+        exps = np.exp(scaled_input) 
+        self.y_hat = exps / np.sum(exps, axis = 1, keepdims = True)
+        return self.y_hat
+    
     def backward(self, error_tensor):
-        # Calculate error tensor for previous layer:
-        pre_error_tensor = self.next_input_tensor * (
-            error_tensor - np.sum(error_tensor * self.next_input_tensor, axis=1, keepdims=True)
-        )
-        return pre_error_tensor
+        # E_(n-1) = y_hat * (E_n - E_n * y_hat)
+        return self.y_hat * (
+            error_tensor - (error_tensor * self.y_hat).sum(axis = 1).reshape(-1, 1))

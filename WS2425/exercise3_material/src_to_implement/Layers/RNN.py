@@ -1,142 +1,172 @@
-from Layers.Base import BaseLayer
 import numpy as np
+from copy import deepcopy
+from Layers.Base import InitializableWithPhaseSeperationLayer
 from Layers.FullyConnected import FullyConnected
 from Layers.TanH import TanH
 from Layers.Sigmoid import Sigmoid
 
+XT_TILDA_ACTIVATION = 'XT_TILDA_ACTIVATION'
+YT_ACTIVATION       = 'YT_ACTIVATION'
+TANH_ACTIVATION     = 'TANH_ACTIVATION'
+SIGMOID_ACTIVATION  = 'SIGMOID_ACTIVATION'
 
-class RNN(BaseLayer):
+class RNN(InitializableWithPhaseSeperationLayer):
     def __init__(self, input_size, hidden_size, output_size):
-        self.trainable = True
-        self.input_size = input_size
+        super().__init__()
+        self.trainable   = True
+        self._memorize   = False
+        self.regularizer = None
+
+        self.input_size  = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
 
-        self.hidden_state = np.zeros((1, hidden_size))
-        self.memorize = False
+        self.fc_xt = FullyConnected(hidden_size + input_size, hidden_size)
+        self.fc_yt = FullyConnected(hidden_size, output_size)
 
-        self.concatenated_inp = None
-        self.hidden = None
-        self.hid_state = None
-        self.intermediate_out = None
-        self.output = None
-        self.input_tensor = None
+        self.previous_ht      = np.zeros(self.hidden_size)
+        self.weights = self.fc_xt.weights
+        
+        self.tanh_layer    = TanH()
+        self.sigmoid_layer = Sigmoid()        
+        self._optimizer    = None
+        self._optimizer_yt = None
 
-        self.fc1 = FullyConnected(self.input_size + self.hidden_size, self.hidden_size)
-        self.fc2 = FullyConnected(self.hidden_size, self.output_size)
-        self.tanh = TanH()
-        self.sigmoid = Sigmoid()
+        self.state = {
+            XT_TILDA_ACTIVATION : {},
+            YT_ACTIVATION       : {},
+            TANH_ACTIVATION     : {},
+            SIGMOID_ACTIVATION  : {}
+        }
 
-        self.fc1.optimizer, self.fc2.optimizer = None, None
+    def forward(self, input_tensor):
+        self.input_tensor = input_tensor
+        self.batch_size   = input_tensor.shape[0]
 
-        self.weights = np.random.uniform(0.0, 1.0, (self.fc1.weights.shape))
+        self.hts = np.zeros((self.batch_size, self.hidden_size))
+        self.yts = np.empty((self.batch_size, self.output_size))
 
-        self.gradient_weights = np.zeros((self.fc1.weights.shape))
-        self.gradient_weights2 = np.zeros((self.fc2.weights.shape))
-        self.optimizer = None
+        if self.memorize == False:
+            self.previous_ht = np.zeros(self.hidden_size)
+            
+        for t in range(self.batch_size):
+            xt  = input_tensor[t,]
+            xt_tilda = np.concatenate((self.previous_ht.flatten(), xt.flatten())).reshape(1, -1)
+            xt_tilda = self.fc_xt.forward(xt_tilda)
 
-    ## Defining our Pythonic optimizer property ##
+            xt_tilda_activation = self.fc_xt.input_tensor.copy()
+            self.state[XT_TILDA_ACTIVATION][t] = xt_tilda_activation
+
+            activated_xt_tilda = self.tanh_layer.forward(xt_tilda)
+
+            tanh_activation = self.tanh_layer.activation.copy()  
+            self.state[TANH_ACTIVATION][t] = tanh_activation
+
+            self.previous_ht = activated_xt_tilda.copy()
+
+            yt = self.fc_yt.forward(activated_xt_tilda)
+            
+            yt_activation = self.fc_yt.input_tensor.copy()
+            self.state[YT_ACTIVATION][t] = yt_activation
+
+            activated_yt = self.sigmoid_layer.forward(yt)
+
+            sigmoid_activation = self.sigmoid_layer.activation.copy()
+            self.state[SIGMOID_ACTIVATION][t] = sigmoid_activation
+
+            self.hts[t] = self.previous_ht
+            self.yts[t] = activated_yt
+
+        return self.yts
+
+    def backward(self, error_tensor):
+        
+        out_grad = np.zeros(self.input_tensor.shape)
+
+        xt_grad  = np.zeros((self.fc_xt.weights.shape))
+        yt_grad  = np.zeros((self.fc_yt.weights.shape))
+        whh_grad = np.zeros((self.fc_xt.weights.shape))
+        wxh_grad = np.zeros((self.fc_xt.weights.shape))
+
+        next_ht  = 0 
+
+        for t in reversed(range(self.batch_size)):
+            yt_error = error_tensor[t,]
+
+            self.sigmoid_layer.activation = self.state[SIGMOID_ACTIVATION][t]
+            d_yt = self.sigmoid_layer.backward(yt_error)
+            
+            self.fc_yt.input_tensor = self.state[YT_ACTIVATION][t]
+            d_yt = self.fc_yt.backward(d_yt.reshape(1, -1)) 
+            
+            yt_grad += self.fc_yt.gradient_weights
+            delta_ht = d_yt + next_ht # Gradient of a copy procedure is a sum
+
+            self.tanh_layer.activation = self.state[TANH_ACTIVATION][t]
+            tanh_grad = self.tanh_layer.backward(delta_ht) 
+
+            self.fc_xt.input_tensor = self.state[XT_TILDA_ACTIVATION][t] 
+            error_grad = self.fc_xt.backward(tanh_grad)
+
+            xt_tilda_activation = self.state[XT_TILDA_ACTIVATION][t].copy()
+            whh_grad += np.dot(xt_tilda_activation.T, tanh_grad)
+
+            next_ht     = error_grad[:, 0:self.hidden_size]
+            out_grad[t] = error_grad[:, self.hidden_size:(self.input_size + self.hidden_size + 1)] 
+            
+            xt_grad  += self.fc_xt.gradient_weights
+
+            wh = self.fc_xt.gradient_weights.copy()
+            wxh_grad += np.dot(wh, tanh_grad.T)
+
+        self.gradient_weights = whh_grad
+
+        if self._optimizer is not None:
+            self.fc_xt.weights = self._optimizer.calculate_update(self.fc_xt.weights, xt_grad)
+            self.fc_yt.weights = self._optimizer_yt.calculate_update(self.fc_yt.weights, yt_grad)
+
+        self.weights = self.fc_xt.weights
+        
+        return out_grad
+
     @property
     def optimizer(self):
-        ## This acts as the getter property for the optimizer attribute ##
-
-        return self.__optimizer
-
+        return self._optimizer
+    
     @optimizer.setter
-    def optimizer(self, val):
-        ## This acts as the setter property for the optimizer attribute ##
-        self.__optimizer = val
-
-    def initialize(self, weights_initializer, bias_initializer):
-        self.fc1.initialize(weights_initializer, bias_initializer)
-        self.fc2.initialize(weights_initializer, bias_initializer)
+    def optimizer(self, optimizer):
+        self._optimizer     = deepcopy(optimizer)
+        self._optimizer_yt  = deepcopy(optimizer)
+        self.fc_xt.optimizer = None
+        self.fc_yt.optimizer = None
 
     @property
     def memorize(self):
-        return self.__memorize
+        return self._memorize
 
     @memorize.setter
-    def memorize(self, val):
-        self.__memorize = val
+    def memorize(self, value):
+        self._memorize = value
 
-    @property
-    def gradient_weights(self):
-        return self.__gradient_weights
-
-    @gradient_weights.setter
-    def gradient_weights(self, val):
-        self.__gradient_weights = val
+    def initialize(self, weights_initializer, bias_initializer):
+        self.fc_yt.initialize(weights_initializer, bias_initializer)
+        self.fc_xt.initialize(weights_initializer, bias_initializer)
 
     @property
     def weights(self):
-        return self.fc1.weights
-
+        return self.fc_xt.weights
+    
     @weights.setter
-    def weights(self, val):
-        self.fc1.weights = val
+    def weights(self, weights):
+        self._weights = weights
 
-    def forward(self, input_tensor):
-        self.input_tensor = input_tensor.copy()
-        self.concatenated_inp = np.zeros(
-            (input_tensor.shape[0], int(self.input_size + self.hidden_size))
-        )
-        self.hidden = np.zeros((input_tensor.shape[0], self.hidden_size))
-        self.hid_state = np.zeros((input_tensor.shape[0], self.hidden_size))
-        self.intermediate_out = np.zeros((input_tensor.shape[0], self.output_size))
-        self.output = np.zeros((input_tensor.shape[0], self.output_size))
+    def set_weight(self, weights):
+        self.fc_xt.weights = weights
 
-        if not self.memorize:
-            self.hidden_state = np.zeros((1, self.hidden_size))
+    @property
+    def gradient_weights(self):
+        return self._gradient_weights
 
-        for idx, sequences in enumerate(input_tensor):
-            self.concatenated_inp[idx] = np.concatenate(
-                (sequences.reshape(1, -1), self.hidden_state), axis=1
-            )
-            self.hidden[idx] = self.fc1.forward(self.concatenated_inp[idx].reshape(1, -1))
-            self.hidden_state = self.tanh.forward(self.hidden[idx].reshape(1, -1))
-            self.hid_state[idx] = self.hidden_state.copy()
-            self.intermediate_out[idx] = self.fc2.forward(self.hidden_state.reshape(1, -1))
-            self.output[idx] = self.sigmoid.forward(self.intermediate_out[idx].reshape(1, -1))
-
-        return self.output
-
-    def backward(self, error_tensor):
-        gradient_inputs = np.zeros(self.input_tensor.shape)
-        gradient_hidden = 0
-        self.gradient_weights = np.zeros((self.fc1.weights.shape))
-        self.gradient_weights2 = np.zeros((self.fc2.weights.shape))
-
-        for idx, error_sequence in enumerate(reversed(error_tensor)):
-            self.sigmoid.output = self.output[len(error_tensor) - (idx + 1)]
-            error_sigmoid = self.sigmoid.backward(error_sequence)
-
-            hid_intermediate = self.hid_state[len(error_tensor) - (idx + 1)]
-            hid = np.insert(hid_intermediate, -1, 1)
-            self.fc2.input_tensor = hid.reshape(1, -1)
-            error_fc2 = self.fc2.backward(error_sigmoid.reshape(1, -1))
-            self.gradient_weights2 += self.fc2.gradient_weights.copy()
-
-            self.tanh.output = self.hid_state[len(error_tensor) - (idx + 1)]
-            half_error_fc2 = error_fc2 + gradient_hidden
-            error_tanh = self.tanh.backward(half_error_fc2.reshape(1, -1))
-
-            inp = self.concatenated_inp[len(error_tensor) - (idx + 1)]
-            inp = np.concatenate((inp, np.array([1]))).reshape(1, -1)
-            self.fc1.input_tensor = inp
-            error_fc1 = self.fc1.backward(error_tanh.reshape(1, -1))
-            self.gradient_weights = self.gradient_weights + self.fc1.gradient_weights.copy()
-
-            gradient_inputs[len(error_tensor) - (idx + 1)] = error_fc1.reshape(1, -1)[
-                :, : self.input_size
-            ].copy()
-            gradient_hidden = error_fc1.reshape(1, -1)[
-                :, self.input_size : self.input_size + self.hidden_size
-            ].copy()
-
-        if self.optimizer is not None:
-            self.weights = self.optimizer.calculate_update(self.weights, self.gradient_weights)
-            self.fc2.weights = self.optimizer.calculate_update(
-                self.fc2.weights, self.gradient_weights2
-            )
-
-        return gradient_inputs
+    @gradient_weights.setter
+    def gradient_weights(self, gradient_weights):
+        self._gradient_weights = gradient_weights

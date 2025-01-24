@@ -1,63 +1,67 @@
-from Layers.Base import BaseLayer
+from Layers.Base import BaseLayer, PhaseSeperatableLayer
 import numpy as np
 
-
-class Pooling(BaseLayer):
+class Pooling(PhaseSeperatableLayer):
     def __init__(self, stride_shape, pooling_shape):
-        super().__init__()  # super constructor
-        self.stride_shape = (
-            stride_shape if isinstance(stride_shape, tuple) else (stride_shape, stride_shape)
-        )
-        self.pooling_shape = pooling_shape
+        super().__init__()
+        self.stride_shape= stride_shape
+        self.pooling_shape= pooling_shape
 
     def forward(self, input_tensor):
-        self.input_tensor = input_tensor
-        output_shape = self._calculate_output_shape(input_tensor)
-        output_tensor = np.zeros(output_shape)
-        self.mask = np.zeros(
-            (
-                input_tensor.shape[0],
-                input_tensor.shape[1],
-                output_shape[2],
-                output_shape[3],
-                self.pooling_shape[0],
-                self.pooling_shape[1],
-            )
-        )
+        self.input_tensor_shape  = input_tensor.shape
+        b_size, C_in, H_in, W_in = input_tensor.shape
+        P_h, P_w = self.pooling_shape
+        S_h, S_w = self.stride_shape
+        
+        H_out = np.floor((H_in - P_h) / S_h).astype(int) + 1
+        W_out = np.floor((W_in - P_w) / S_w).astype(int) + 1
 
-        for i in range(output_shape[2]):
-            for j in range(output_shape[3]):
-                region = input_tensor[
-                    :,
-                    :,
-                    i * self.stride_shape[0] : i * self.stride_shape[0] + self.pooling_shape[0],
-                    j * self.stride_shape[1] : j * self.stride_shape[1] + self.pooling_shape[1],
-                ]
-                output_tensor[:, :, i, j] = np.max(region, axis=(2, 3))
+        output = np.zeros((b_size, C_in, H_out, W_out))
 
-                # Create mask for backpropagation
-                # Each output pixel corresponds to 1 region of input
-                max_region = region == np.max(region, axis=(2, 3), keepdims=True)
-                self.mask[:, :, i, j] = max_region
+        self.pooling_locations = list()
 
-        return output_tensor
+        for b_idx in range(b_size):
+            for c_idx in range(C_in):
+                for pool_window, (h_idx, w_idx) in self.slide_window(
+                    input_tensor[b_idx, c_idx], 
+                    H_out, 
+                    W_out, 
+                    *self.stride_shape, 
+                    *self.pooling_shape
+                ):
+                    max_value = np.max(pool_window)
+                    (mxi, mxj), *_ = np.argwhere(pool_window == max_value) + [h_idx * S_h, w_idx * S_w]
+                    
+                    output[b_idx, c_idx, h_idx, w_idx] = max_value                    
+                    self.pooling_locations.append((b_idx, c_idx, mxi, mxj)) 
+
+        return output
 
     def backward(self, error_tensor):
-        input_grad = np.zeros_like(self.input_tensor)
+        *_, H_in, W_in = error_tensor.shape
 
-        for i in range(error_tensor.shape[2]):
-            for j in range(error_tensor.shape[3]):
-                grad = error_tensor[:, :, i, j][:, :, None, None]  # (B, C, 1, 1)
-                input_grad[
-                    :,
-                    :,
-                    i * self.stride_shape[0] : i * self.stride_shape[0] + self.pooling_shape[0],
-                    j * self.stride_shape[1] : j * self.stride_shape[1] + self.pooling_shape[1],
-                ] += grad * self.mask[:, :, i, j]
-        return input_grad
+        output = np.zeros((self.input_tensor_shape)).astype(float)
+        b_size, C_in, *_ = output.shape
+        
+        pos_idx = 0
+        for b_idx in range(b_size):
+            for c_idx in range(C_in):
+                for h_idx in range(H_in):
+                    for w_idx in range(W_in): 
+                        *_, mxi, mxj = self.pooling_locations[pos_idx]
+                        output[b_idx, c_idx, mxi, mxj] += error_tensor[b_idx, c_idx, h_idx, w_idx]
+                        pos_idx += 1
+                        
+        return output
+    
+    def slide_window(self, input_tensor, H_out, W_out, S_h, S_w, P_h, P_w):
+        for i in range(0, H_out):
+            for j in range(0, W_out):
+                tensor_window = input_tensor[i * S_h: i * S_h + P_h, 
+                                             j * S_w: j * S_w + P_w]
+                yield tensor_window, (i, j)
+        
 
-    def _calculate_output_shape(self, input_tensor):
-        batch_size, channels, height, width = input_tensor.shape
-        output_height = (height - self.pooling_shape[0]) // self.stride_shape[0] + 1
-        output_width = (width - self.pooling_shape[1]) // self.stride_shape[1] + 1
-        return (batch_size, channels, output_height, output_width)
+
+
+

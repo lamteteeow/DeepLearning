@@ -1,72 +1,89 @@
+import numpy as np  # type: ignore
 import copy
+import pickle
+import os
+from Optimization.Loss import BaseLoss
+from Optimization.Optimizers import BaseOptimizer
+from Layers.Base import InitializableLayer
 
+def save(filename, net):
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, "wb") as f:
+        pickle.dump(net, f)
+
+
+def load(filename, data_layer):
+    with open(filename, "rb") as f:
+        net = pickle.load(f)
+    net.data_layer = data_layer
+    return net
 
 class NeuralNetwork:
-    def __init__(self, optimizer, weights_initializer, bias_initializer):
-        self.optimizer = optimizer
-        self.loss = list()
-        self.layers = list()
+    def __init__(self, optimizer, weights_initializer, bias_initializer) -> None:
         self.data_layer = None
-        self.loss_layer = None
+        self.optimizer: BaseOptimizer = optimizer
+        self.loss_layer: BaseLoss = None
+        self.layers = list()
+        self.loss = list()
         self.weights_initializer = weights_initializer
         self.bias_initializer = bias_initializer
-        self.inp = None
-        self.label = None
-        self.out = None
-        self.phase = None
-
-    @property
-    def phase(self):
-        return self.__phase
-
-    @phase.setter
-    def phase(self, val):
-        self.__phase = val
 
     def forward(self):
-        self.inp, self.label = self.data_layer.next()
+        x, self.y = copy.deepcopy(self.data_layer.next())
 
-        x = self.inp.copy()
-
+        norm_loss = 0
         for layer in self.layers:
-            layer.testing_phase = self.phase
+            layer.testing_phase = False
             x = layer.forward(x)
+            if layer.trainable:
+                if layer.optimizer.regularizer is not None:
+                    norm_loss += layer.optimizer.regularizer.norm(layer.weights)
 
-        data_loss = self.loss_layer.forward(x, self.label)
-
-        reg_loss = 0
-        if self.optimizer.regularizer is not None:
-            reg_loss = self.optimizer.regularizer.norm(data_loss)
-
-        self.out = data_loss + reg_loss
-
-        return self.out
+        return self.loss_layer.forward(x, copy.deepcopy(self.y)) + norm_loss
 
     def backward(self):
-        loss_grad = self.loss_layer.backward(self.label)
-
-        for layer in self.layers[::-1]:
-            loss_grad = layer.backward(loss_grad)
+        y = self.loss_layer.backward(true_label=copy.deepcopy(self.y))
+        for layer in reversed(self.layers):
+            y = layer.backward(y)
 
     def append_layer(self, layer):
-        if layer.trainable:
+        if isinstance(layer, InitializableLayer) and layer.trainable:
             layer.optimizer = copy.deepcopy(self.optimizer)
             layer.initialize(self.weights_initializer, self.bias_initializer)
-
         self.layers.append(layer)
 
     def train(self, iterations):
-        self.phase = False
-        for iter in range(iterations):
-            loss = self.forward()
-            self.loss.append(loss)
+        self.phase = "train"
+        for epoch in range(iterations):
+            current_loss = self.forward()
+            self.loss.append(current_loss)
             self.backward()
 
     def test(self, input_tensor):
-        self.phase = True
-        x = input_tensor
+        self.phase = "test"
         for layer in self.layers:
-            layer.testing_phase = self.phase
-            x = layer.forward(x)
+            layer.testing_phase = True
+            input_tensor = layer.forward(input_tensor)
+        return input_tensor
 
-        return x
+    def __rshift__(self, next_layer):
+        self.append_layer(next_layer)
+        return self
+
+    @property
+    def phase(self):
+        return self._phase
+
+    @phase.setter
+    def phase(self, phase):
+        self._phase = phase
+        for layer in self.layers:
+            layer.set_phase(phase)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["data_layer"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)

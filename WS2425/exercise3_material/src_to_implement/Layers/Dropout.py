@@ -1,27 +1,20 @@
-from Layers.Base import BaseLayer
-import numpy as np
+from Layers.Initializers import BaseInitializer
+import numpy as np #type: ignore
+from Layers.Base import PhaseSeperatableLayer
 
-
-class Dropout(BaseLayer):
+class Dropout(PhaseSeperatableLayer):
     def __init__(self, probability):
         super().__init__()
         self.probability = probability
-        self.mask_arr = None
 
     def forward(self, input_tensor):
-        if not self.testing_phase:
-            self.mask_arr = (1 / self.probability) * np.random.choice(
-                [0, 1], size=input_tensor.shape, p=[1 - self.probability, self.probability]
-            )
+        if self.testing_phase:
+            return input_tensor
 
-            output_tensor = input_tensor * self.mask_arr
-
-        else:
-            output_tensor = input_tensor.copy()
-
-        return output_tensor
+        self.mask = (np.random.rand(*input_tensor.shape) < self.probability).astype(float)
+        self.mask = self.mask / self.probability
+        return input_tensor * self.mask
 
     def backward(self, error_tensor):
-        input_grad = error_tensor * self.mask_arr
+        return error_tensor * self.mask
 
-        return input_grad
