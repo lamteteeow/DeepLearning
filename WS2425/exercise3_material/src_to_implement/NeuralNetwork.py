@@ -1,72 +1,79 @@
 import copy
-
+import numpy as np
+from Layers import *
+from Optimization import *
 
 class NeuralNetwork:
-    def __init__(self, optimizer, weights_initializer, bias_initializer):
+    def __init__(self, optimizer, weightsInitializer, biasInitializer):
         self.optimizer = optimizer
-        self.loss = list()
-        self.layers = list()
+        self.loss = []
+        self.layers = []
         self.data_layer = None
         self.loss_layer = None
-        self.weights_initializer = weights_initializer
-        self.bias_initializer = bias_initializer
-        self.inp = None
-        self.label = None
-        self.out = None
-        self.phase = None
-
-    @property
-    def phase(self):
-        return self.__phase
-
-    @phase.setter
-    def phase(self, val):
-        self.__phase = val
+        self.weightsInitializer = weightsInitializer
+        self.biasInitializer = biasInitializer
+        # Use for property "Phase"
+        self._phase = "train"
 
     def forward(self):
-        self.inp, self.label = self.data_layer.next()
+         #Provide 2 variables by calling next() from data layer:
+        input_tensor , label_tensor = self.data_layer.next() #from Helpers.py line 161
 
-        x = self.inp.copy()
-
+        #Initialize for backward:
+        self.label_tensor = label_tensor
+        
+        #Forward input_tensor through the whole network (of Layers and Optimizers folder):
+        tensor = input_tensor
+        # Sum the regularization loss up
+        norm_loss = 0
         for layer in self.layers:
-            layer.testing_phase = self.phase
-            x = layer.forward(x)
+            tensor = layer.forward(tensor)
+            if layer.trainable == True: 
+                if layer.optimizer.regularizer is not None:
+                    regularization_loss= layer.optimizer.regularizer.norm(layer.weights)
+                    norm_loss += regularization_loss
+        loss = self.loss_layer.forward(tensor, label_tensor) + norm_loss
 
-        data_loss = self.loss_layer.forward(x, self.label)
-
-        reg_loss = 0
-        if self.optimizer.regularizer is not None:
-            reg_loss = self.optimizer.regularizer.norm(data_loss)
-
-        self.out = data_loss + reg_loss
-
-        return self.out
-
+        return loss
+    
     def backward(self):
-        loss_grad = self.loss_layer.backward(self.label)
-
-        for layer in self.layers[::-1]:
-            loss_grad = layer.backward(loss_grad)
+        error_tensor = self.loss_layer.backward(self.label_tensor)
+        for layer in reversed(self.layers):
+            error_tensor = layer.backward(error_tensor)
 
     def append_layer(self, layer):
         if layer.trainable:
+            # layer.initialize(copy.deepcopy(self.weightsInitializer), copy.deepcopy(self.biasInitializer))
+            # layer.optimizer = copy.deepcopy(self.optimizer)
             layer.optimizer = copy.deepcopy(self.optimizer)
-            layer.initialize(self.weights_initializer, self.bias_initializer)
-
+            layer.initialize(self.weightsInitializer, self.biasInitializer)
+            
         self.layers.append(layer)
 
     def train(self, iterations):
-        self.phase = False
-        for iter in range(iterations):
+        self.phase = "train"
+        for i in range(iterations):
             loss = self.forward()
             self.loss.append(loss)
             self.backward()
 
     def test(self, input_tensor):
-        self.phase = True
-        x = input_tensor
+        self.phase = "test"
+        output_tensor = input_tensor
         for layer in self.layers:
-            layer.testing_phase = self.phase
-            x = layer.forward(x)
+            output_tensor = layer.forward(output_tensor)
+        return output_tensor
 
-        return x
+    @property
+    def phase(self):
+        return self._phase
+    
+    @phase.setter
+    def phase(self, new_phase):
+        self._phase = new_phase
+        if self._phase == "train":
+            for layer in self.layers:
+                layer.testing_phase = False
+        elif self._phase == "test":
+            for layer in self.layers:
+                layer.testing_phase = True
