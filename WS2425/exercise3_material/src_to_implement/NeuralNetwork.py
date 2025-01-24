@@ -1,7 +1,5 @@
 import copy
 import numpy as np
-from Layers import *
-from Optimization import *
 
 class NeuralNetwork:
     def __init__(self, optimizer, weightsInitializer, biasInitializer):
@@ -28,7 +26,7 @@ class NeuralNetwork:
         norm_loss = 0
         for layer in self.layers:
             tensor = layer.forward(tensor)
-            if layer.trainable == True: 
+            if layer.trainable:
                 if layer.optimizer.regularizer is not None:
                     regularization_loss= layer.optimizer.regularizer.norm(layer.weights)
                     norm_loss += regularization_loss
