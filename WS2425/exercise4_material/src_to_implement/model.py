@@ -74,8 +74,8 @@ class ResNet(nn.Module):
             ResBlock(256, 512, 2),
         )
 
-        # self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.avg_pool = nn.AvgPool2d()
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        # self.avg_pool = nn.AvgPool2d()
         self.flat = nn.Flatten()
         self.fc = nn.Linear(512, 2)
         self.sigmoid = nn.Sigmoid()
