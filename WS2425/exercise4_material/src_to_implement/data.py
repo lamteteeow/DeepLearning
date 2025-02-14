@@ -4,10 +4,27 @@ from pathlib import Path
 from skimage.io import imread
 from skimage.color import gray2rgb
 import numpy as np
+import random
 import torchvision as tv
 
 train_mean = [0.59685254, 0.59685254, 0.59685254]
 train_std = [0.16043035, 0.16043035, 0.16043035]
+
+
+class RandomGamma:
+    def __init__(self, amount):
+        self.amount = amount
+
+    def __call__(self, x):
+        return tv.transforms.functional.adjust_gamma(x, random.uniform(max(0, 1 - self.amount), (1 + self.amount)))
+
+class RandomConstrast:
+    def __call__(self, x):
+        return tv.transforms.functional.adjust_constrast(x, random.uniform(0.7,1.3))
+
+class RandomBrightness:
+    def __call__(self, x):
+        return tv.transforms.functional.adjust_gamma(x, random.uniform(0.7,1.3))
 
 
 class ChallengeDataset(Dataset):
@@ -24,13 +41,19 @@ class ChallengeDataset(Dataset):
 
         self.data = data
         self.mode = mode
+
         ## Defining the augmentations for the images ##
         if mode == "train":
             self._transform = tv.transforms.Compose(
                 [
                     tv.transforms.ToPILImage(),  # Converts to PILImage category
-                    # tv.transforms.RandomHorizontalFlip(p=0.2),  # Flips the image horizontally randomly
+                    tv.transforms.RandomVerticalFlip(p=0.5),  # Flips the image horizontally randomly
+                    tv.transforms.RandomHorizontalFlip(p=0.5),  # Flips the image horizontally randomly
                     # tv.transforms.RandomRotation(degrees=(0,30)),  # Gets random perspective of the image
+                    # tv.transforms.RandomAutocontrast(p=0.5), # not supported in this ver
+                    # tv.transforms.RandomAdjustSharpness(), # not supported in this ver
+                    tv.transforms.ColorJitter(0.2,0.2,0,0),
+                    RandomGamma(0.2),
                     tv.transforms.ToTensor(),  # Transforms to Pytorch Tensor
                     tv.transforms.Normalize(train_mean, train_std),  # Normalizes the images
                 ]
@@ -72,7 +95,7 @@ class ChallengeDataset(Dataset):
         ## Changing the rgb image to rgb ##
         img = gray2rgb(img)
 
-        ## Finally applyig the augmentations ##
+        ## Finally applying the augmentations ##
         img_tensor = self._transform(img)
 
         ## Getting the two labels ##

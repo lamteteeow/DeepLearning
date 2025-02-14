@@ -73,6 +73,12 @@ class Trainer:
         self._optim.zero_grad()
         pred = self._model(x)
         loss = self._crit(pred, y.float())
+        
+        # Apply L2 regularization (default lambda 0.0001)
+        l2_norm = sum(p.pow(2).sum() for p in self._model.parameters())
+        loss += 0.00025 * l2_norm
+        # loss += 0.001 * l2_norm
+
         loss.backward()
         self._optim.step()
         return loss.item()
@@ -121,11 +127,11 @@ class Trainer:
 
         self._model.eval()
 
-        batch_pred = []
-        batch_labels = []
+        # batch_pred = []
+        # batch_labels = []
 
         total_loss = 0
-        total_metric = 0
+        total_metric = []
 
         with t.no_grad():
             for x, y in self._val_test_dl:
@@ -134,18 +140,26 @@ class Trainer:
                     y = y.to(device="cuda")
 
                 loss, pred = self.val_test_step(x, y)
-                batch_pred.append(pred)
-                batch_labels.append(y)
+                # batch_pred.append(a > 0.5 for a in x)
+                # batch_labels.append(b for b in y)
 
-                total_metric += f1_score(
-                    y.cpu(), pred.cpu() > 0.5, average="samples", zero_division=0
-                )
+                total_metric.append(f1_score(
+                    y.cpu(), pred.cpu() > 0.5, average="weighted", zero_division="warn"
+                ))
                 total_loss += loss
+        
+        # batch_pred_2 = [[int(x) for x in row] for row in batch_pred]
 
-        avg_metric = (total_metric) / len(self._val_test_dl)
+        # print(type(batch_labels))
+        # print(type(batch_pred))
+        # total_metric = f1_score(batch_labels, batch_pred_2, average="weighted", zero_division=0)
+
+        print(total_metric)
+
+        # avg_metric = (total_metric) / len(self._val_test_dl)
         avg_loss = (total_loss) / len(self._val_test_dl)
 
-        print(avg_metric)
+        # print(avg_metric)
 
         return avg_loss
 

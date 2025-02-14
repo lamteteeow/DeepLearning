@@ -32,15 +32,18 @@ class ResBlock(nn.Module):
         )
         self.identity_bn = nn.BatchNorm2d(num_features=out_channels)
         self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
         skip_inp = x.clone()
 
         x = self.conv1(x)
+        # x = self.dropout(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.conv2(x)
         x = self.bn2(x)
+        x = self.dropout(x)
 
         skip_inp = self.identity_conv(skip_inp)
 
@@ -74,21 +77,20 @@ class ResNet(nn.Module):
             ResBlock(256, 512, 2),
         )
 
+        # [info](https://discuss.pytorch.org/t/global-average-pooling-in-pytorch/6721/10) 
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        # self.avg_pool = nn.AvgPool2d()
+        # self.avg_pool = nn.AvgPool2d((1, 1))
         self.flat = nn.Flatten()
+        self.dropout = nn.Dropout(0.2)
         self.fc = nn.Linear(512, 2)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.resnet_head(x)
-
+        x = self.dropout(x)
         x = self.avg_pool(x)
-
         x = self.flat(x)
-
         x = self.fc(x)
-
         x = self.sigmoid(x)
 
         return x
