@@ -77,7 +77,7 @@ class ResNet(nn.Module):
             ResBlock(256, 512, 2),
         )
 
-        # [info](https://discuss.pytorch.org/t/global-average-pooling-in-pytorch/6721/10) 
+        # [info](https://discuss.pytorch.org/t/global-average-pooling-in-pytorch/6721/10)
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         # self.avg_pool = nn.AvgPool2d((1, 1))
         self.flat = nn.Flatten()

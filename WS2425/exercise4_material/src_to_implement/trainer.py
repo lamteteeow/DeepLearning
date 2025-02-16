@@ -10,6 +10,7 @@ class Trainer:
         model,  # Model to be trained.
         crit,  # Loss function
         optim=None,  # Optimizer
+        scheduler=None,  # LR Scheduler
         train_dl=None,  # Training data set
         val_test_dl=None,  # Validation (or test) data set
         cuda=True,  # Whether to use the GPU
@@ -18,6 +19,7 @@ class Trainer:
         self._model = model
         self._crit = crit
         self._optim = optim
+        self._scheduler = scheduler
         self._train_dl = train_dl
         self._val_test_dl = val_test_dl
         self._cuda = cuda
@@ -73,14 +75,15 @@ class Trainer:
         self._optim.zero_grad()
         pred = self._model(x)
         loss = self._crit(pred, y.float())
-        
-        # Apply L2 regularization (default lambda 0.0001)
-        l2_norm = sum(p.pow(2).sum() for p in self._model.parameters())
-        loss += 0.00025 * l2_norm
-        # loss += 0.001 * l2_norm
+
+        # Apply L2 regularization (default lambda 0.000001)
+        # l2_norm = sum(p.pow(2).sum() for p in self._model.parameters())
+        # loss += 0.000005 * l2_norm
+        # print(f"L2 = ",l2_norm)
 
         loss.backward()
         self._optim.step()
+
         return loss.item()
 
     def val_test_step(self, x, y):
@@ -112,6 +115,7 @@ class Trainer:
             total_loss += loss
 
         avg_loss = (total_loss) / len(self._train_dl)
+
         return avg_loss
 
     def val_test(self):
@@ -140,24 +144,29 @@ class Trainer:
                     y = y.to(device="cuda")
 
                 loss, pred = self.val_test_step(x, y)
+
                 # batch_pred.append(a > 0.5 for a in x)
                 # batch_labels.append(b for b in y)
 
-                total_metric.append(f1_score(
-                    y.cpu(), pred.cpu() > 0.5, average="weighted", zero_division="warn"
-                ))
+                total_metric.append(
+                    f1_score(y.cpu(), pred.cpu() > 0.5, average="weighted", zero_division=0)
+                )
                 total_loss += loss
-        
+
         # batch_pred_2 = [[int(x) for x in row] for row in batch_pred]
 
         # print(type(batch_labels))
         # print(type(batch_pred))
         # total_metric = f1_score(batch_labels, batch_pred_2, average="weighted", zero_division=0)
 
+        # print(ele.shape for ele in total_metric)
         print(total_metric)
 
         # avg_metric = (total_metric) / len(self._val_test_dl)
         avg_loss = (total_loss) / len(self._val_test_dl)
+
+        # self._scheduler.step(avg_loss)
+        self._scheduler.step()
 
         # print(avg_metric)
 
@@ -194,12 +203,14 @@ class Trainer:
 
             train_loss = self.train_epoch()
             val_loss = self.val_test()
+            # print(f"LR: {self._optim.param_groups[0]['lr']:.2e}")
 
             train_losses.append(train_loss)
             val_losses.append(val_loss)
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
+                print(best_val_loss)
                 self.save_checkpoint(epoch_counter)
 
                 best_epoch = epoch_counter
